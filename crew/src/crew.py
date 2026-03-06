@@ -34,7 +34,12 @@ def build_crew(repo_url: str | None = None) -> Crew:
 
     agents = {}
     for name, cfg in agents_cfg.items():
-        agents[name] = Agent(llm=llm, tools=tool_map.get(name, []), **cfg)
+        agents[name] = Agent(
+            llm=llm,
+            tools=tool_map.get(name, []),
+            max_retry_limit=3,
+            **cfg,
+        )
 
     tasks = []
     for name, cfg in tasks_cfg.items():
@@ -42,4 +47,9 @@ def build_crew(repo_url: str | None = None) -> Crew:
         cfg["description"] = cfg["description"].strip() + f"\n\nTarget repo: {repo}"
         tasks.append(Task(agent=agents[agent_name], **cfg))
 
-    return Crew(agents=list(agents.values()), tasks=tasks, verbose=True)
+    return Crew(
+        agents=list(agents.values()),
+        tasks=tasks,
+        verbose=True,
+        max_rpm=10,
+    )

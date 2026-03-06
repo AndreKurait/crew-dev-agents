@@ -43,7 +43,9 @@ def list_open_issues(limit: int = 20) -> str:
     gh = _get_github()
     repo = gh.get_repo(_repo_name())
     issues = []
-    for issue in repo.get_issues(state="open", sort="created", direction="desc")[:limit]:
+    for issue in repo.get_issues(state="open", sort="created", direction="desc"):
+        if len(issues) >= limit:
+            break
         if issue.pull_request:
             continue
         issues.append({
@@ -62,7 +64,9 @@ def list_open_prs(limit: int = 10) -> str:
     gh = _get_github()
     repo = gh.get_repo(_repo_name())
     prs = []
-    for pr in repo.get_pulls(state="open", sort="created", direction="desc")[:limit]:
+    for pr in repo.get_pulls(state="open", sort="created", direction="desc"):
+        if len(prs) >= limit:
+            break
         prs.append({
             "number": pr.number,
             "title": pr.title,
