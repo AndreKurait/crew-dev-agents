@@ -6,7 +6,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   schema:
-    apiVersion: kro.run/v1alpha1
+    apiVersion: v1alpha1
     kind: CrewAIStack
     spec:
       name: string
