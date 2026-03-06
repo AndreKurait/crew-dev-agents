@@ -111,6 +111,18 @@ resource "aws_iam_role_policy" "ack_permissions" {
         Action   = ["secretsmanager:*"]
         Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/*"
       },
+      {
+        Sid      = "SecretsManagerList"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:ListSecrets"]
+        Resource = "*"
+      },
+      {
+        Sid      = "ECRList"
+        Effect   = "Allow"
+        Action   = ["ecr:DescribeRepositories"]
+        Resource = "*"
+      },
     ]
   })
 }

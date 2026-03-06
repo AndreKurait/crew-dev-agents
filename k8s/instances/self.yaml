@@ -1,14 +1,14 @@
-# Example: point the crew at a target repo
+# Point the crew at its own repo for self-improvement
 apiVersion: kro.run/v1alpha1
 kind: CrewAIStack
 metadata:
-  name: example-repo
+  name: self
   namespace: crewai
   annotations:
     argocd.argoproj.io/sync-wave: "2"
 spec:
-  name: example-repo
-  repoUrl: https://github.com/AndreKurait/example-target-repo
+  name: self
+  repoUrl: https://github.com/AndreKurait/crew-dev-agents
   schedule: "0 */6 * * *"
   bedrockModel: "bedrock/anthropic.claude-opus-4-6-v1:0"
   bedrockRegion: "us-west-2"

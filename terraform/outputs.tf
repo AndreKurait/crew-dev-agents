@@ -34,3 +34,7 @@ output "ack_capability_role_arn" {
 output "crewai_pod_role_arn" {
   value = aws_iam_role.crewai_pod.arn
 }
+
+output "github_actions_role_arn" {
+  value = aws_iam_role.github_actions.arn
+}
