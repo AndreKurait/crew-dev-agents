@@ -48,3 +48,4 @@ credentials.*
 # AWS specific
 .aws/
 aws-credentials*
+terraform/tfplan
