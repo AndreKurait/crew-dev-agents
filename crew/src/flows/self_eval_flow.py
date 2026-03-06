@@ -15,11 +15,10 @@ class FlowState(BaseModel):
     quality_threshold: float = 0.7
     crew_output: str = ""
     metrics: dict = {}
-    evolution_proposals: list = []
 
 
 class SelfEvalFlow(Flow[FlowState]):
-    """Run crew → evaluate → loop or evolve."""
+    """Run crew → evaluate → loop or finalize."""
 
     @start()
     def run_crew(self):
@@ -30,10 +29,8 @@ class SelfEvalFlow(Flow[FlowState]):
 
     @router(run_crew)
     def evaluate(self):
-        """Score the crew output and decide: retry, evolve, or finalize."""
         output = self.state.crew_output
         score = 0.0
-        # Simple heuristic scoring — replace with LLM-based eval in production
         if output and len(output) > 100:
             score += 0.3
         if "issue_number" in output or "pr_number" in output:
@@ -46,36 +43,49 @@ class SelfEvalFlow(Flow[FlowState]):
             "retry_count": self.state.retry_count,
             "output_length": len(output),
         }
-
         if score >= self.state.quality_threshold:
             return "finalize"
         if self.state.retry_count < self.state.max_retries:
             self.state.retry_count += 1
             return "retry"
-        return "evolve"
+        return "finalize"
 
     @listen("retry")
     def retry_crew(self):
-        """Re-run crew with feedback from previous attempt."""
         self.run_crew()
-
-    @listen("evolve")
-    def evolve_config(self):
-        """Trigger Evolver agent to propose config changes."""
-        from src.tools.metrics_tool import store_metrics
-        store_metrics(json.dumps(self.state.metrics))
-        # In production: Evolver agent creates a PR on the platform repo
-        self.state.evolution_proposals.append({
-            "trigger": "quality_below_threshold",
-            "score": self.state.quality_score,
-            "suggestion": "Review agent backstories and task descriptions for specificity",
-        })
 
     @listen("finalize")
     def finalize(self):
-        """Store metrics and complete."""
         from src.tools.metrics_tool import store_metrics
-        store_metrics(json.dumps(self.state.metrics))
+        store_metrics.run(json.dumps(self.state.metrics))
+        # Create a self-improvement issue if score is low
+        if self.state.quality_score < self.state.quality_threshold:
+            self._create_improvement_issue()
+
+    def _create_improvement_issue(self):
+        """Create a GitHub issue on the platform repo suggesting improvements."""
+        try:
+            from src.tools.github_tool import _get_github
+            gh = _get_github()
+            repo = gh.get_repo("AndreKurait/crew-dev-agents")
+            repo.create_issue(
+                title=f"[Auto] Self-improvement: quality score {self.state.quality_score:.2f}",
+                body=(
+                    f"## Automated Self-Evaluation Report\n\n"
+                    f"**Quality Score**: {self.state.quality_score:.2f} "
+                    f"(threshold: {self.state.quality_threshold})\n"
+                    f"**Retries**: {self.state.retry_count}\n"
+                    f"**Output Length**: {len(self.state.crew_output)}\n\n"
+                    f"### Suggested Improvements\n"
+                    f"- Review agent backstories for specificity\n"
+                    f"- Add more targeted tools\n"
+                    f"- Improve task descriptions with concrete examples\n"
+                    f"- Add linting, tests, and better error handling\n"
+                ),
+                labels=["self-improvement", "automated"],
+            )
+        except Exception as e:
+            print(f"Failed to create improvement issue: {e}")
 
 
 def run_flow():
