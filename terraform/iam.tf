@@ -88,6 +88,12 @@ resource "aws_iam_role_policy" "ack_permissions" {
         ]
       },
       {
+        Sid      = "S3List"
+        Effect   = "Allow"
+        Action   = ["s3:ListAllMyBuckets", "s3:GetBucketLocation"]
+        Resource = "*"
+      },
+      {
         Sid      = "ECR"
         Effect   = "Allow"
         Action   = ["ecr:*"]
