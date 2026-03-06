@@ -1,45 +1,50 @@
 triage_issues:
   description: >
-    Check the target repo for open issues. If issues exist, triage them
-    (add labels, priority comments). If NO issues exist, read the repo
-    structure and key files (README.md, pyproject.toml, Dockerfile, crew/src/)
-    to identify what's missing, then create 2-3 specific improvement issues.
-    Focus on: missing tests, missing linting, missing CI checks, documentation gaps.
+    1. Use list_open_issues to check for existing issues.
+    2. If issues exist, add appropriate labels (bug, enhancement, good-first-issue).
+    3. If NO issues exist, use get_repo_contents and read_file to examine the
+       codebase, then use create_issue to create 1-2 specific improvement issues.
+       Good issues to create: "Add pytest unit tests", "Add ruff linting config",
+       "Add crew/ README documentation".
   expected_output: >
-    JSON with: issues_triaged (count), issues_created (list with number, title).
+    A summary of what was done: issues triaged or created, with issue numbers.
   agent: triager
 
 review_code:
   description: >
-    Read the crew source code files (crew/src/crew.py, crew/src/tools/github_tool.py,
-    crew/src/tools/metrics_tool.py, crew/src/flows/self_eval_flow.py).
-    Identify code quality issues: missing error handling, missing type hints,
-    missing docstrings, potential bugs. Create a GitHub issue summarizing
-    your code review findings with specific file:issue pairs.
+    1. Use get_repo_contents to list the crew/src/ directory.
+    2. Use read_file to read crew/src/crew.py and crew/src/tools/github_tool.py.
+    3. Identify one concrete improvement (missing docstring, missing error handling,
+       code duplication, etc).
+    4. Use create_issue to file a specific issue about what you found.
   expected_output: >
-    JSON with: files_reviewed (list), issues_found (count), issue_created (number, url).
+    A summary of the code review with the issue number created.
   agent: reviewer
 
 implement_fix:
   description: >
-    Check for open issues labeled 'good-first-issue' or 'self-improvement'.
-    If any exist, describe what code changes would fix the highest priority one.
-    If no actionable issues exist, create an issue proposing to add a
-    pyproject.toml [tool.ruff] linting configuration and a basic test file.
+    1. Use list_open_issues to find an open issue to fix.
+    2. Pick the simplest one (prefer issues labeled good-first-issue or self-improvement).
+    3. Use create_branch to create a branch named "fix/issue-NUMBER".
+    4. Use read_file to read the relevant file, then use create_or_update_file
+       to write the fix on your branch.
+    5. Use create_pull_request to open a PR referencing the issue.
+    6. Use merge_pull_request to merge it.
+    7. Use close_issue to close the original issue.
   expected_output: >
-    JSON with: issue_addressed (number or null), proposed_changes (description).
+    A summary with: issue fixed, branch name, PR number, merge status.
   agent: coder
 
-evaluate_and_evolve:
+evolve_crew:
   description: >
-    Read the repo structure, README.md, and the crew config files
-    (crew/config/agents.yaml, crew/config/tasks.yaml). Evaluate what's
-    working and what needs improvement. Create a GitHub issue titled
-    "[Evolution] Crew improvement plan" with specific, actionable items:
-    1. What tests to add (pytest structure, what to test)
-    2. What linting to add (ruff config)
-    3. What documentation to improve
-    4. How to make the crew more effective
+    1. Use read_file to read crew/config/agents.yaml and crew/config/tasks.yaml.
+    2. Analyze what could be improved in the agent definitions or task descriptions
+       to make the crew more effective.
+    3. Use create_branch to create a branch named "evolve/DESCRIPTION".
+    4. Use create_or_update_file to update the config file(s) on that branch.
+    5. Use create_pull_request to open a PR describing the evolution.
+    6. Use merge_pull_request to merge it.
+    Keep changes small and focused. Only change one thing per evolution.
   expected_output: >
-    JSON with: improvements_proposed (list), issue_created (number, url).
+    A summary with: what was changed, branch name, PR number, merge status.
   agent: evolver

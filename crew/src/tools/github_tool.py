@@ -1,8 +1,9 @@
 import json
 import os
+import uuid
 
 from crewai.tools import tool
-from github import Github, Auth
+from github import Github, Auth, GithubException
 
 
 def _get_github() -> Github:
@@ -83,7 +84,7 @@ def add_labels(issue_number: int, labels: str) -> str:
 
 @tool("create_issue")
 def create_issue(title: str, body: str, labels: str = "") -> str:
-    """Create a new GitHub issue on the target repo. Returns JSON with issue number and URL."""
+    """Create a new GitHub issue. Returns JSON with issue number and URL."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
@@ -96,7 +97,7 @@ def create_issue(title: str, body: str, labels: str = "") -> str:
 
 @tool("get_repo_contents")
 def get_repo_contents(path: str = "") -> str:
-    """List files and directories at a path in the repo. Empty path lists root."""
+    """List files and directories at a path in the repo."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
@@ -110,11 +111,81 @@ def get_repo_contents(path: str = "") -> str:
 
 @tool("read_file")
 def read_file(path: str) -> str:
-    """Read a file from the repo. Returns the file content (max 5000 chars)."""
+    """Read a file from the repo. Returns content (max 5000 chars)."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
         content = repo.get_contents(path)
         return content.decoded_content.decode("utf-8")[:5000]
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool("create_or_update_file")
+def create_or_update_file(path: str, content: str, message: str, branch: str = "main") -> str:
+    """Create or update a file in the repo on the given branch. Returns JSON with commit SHA."""
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        try:
+            existing = repo.get_contents(path, ref=branch)
+            result = repo.update_file(path, message, content, existing.sha, branch=branch)
+            return json.dumps({"action": "updated", "sha": result["commit"].sha})
+        except GithubException:
+            result = repo.create_file(path, message, content, branch=branch)
+            return json.dumps({"action": "created", "sha": result["commit"].sha})
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool("create_branch")
+def create_branch(branch_name: str) -> str:
+    """Create a new branch from main. Returns JSON with branch ref."""
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        main_ref = repo.get_git_ref("heads/main")
+        repo.create_git_ref(f"refs/heads/{branch_name}", main_ref.object.sha)
+        return json.dumps({"branch": branch_name, "sha": main_ref.object.sha})
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool("create_pull_request")
+def create_pull_request(title: str, body: str, head_branch: str, base_branch: str = "main") -> str:
+    """Create a pull request. Returns JSON with PR number and URL."""
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        pr = repo.create_pull(title=title, body=body, head=head_branch, base=base_branch)
+        return json.dumps({"number": pr.number, "url": pr.html_url})
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool("merge_pull_request")
+def merge_pull_request(pr_number: int) -> str:
+    """Merge a pull request by number. Returns JSON with merge status."""
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        pr = repo.get_pull(int(pr_number))
+        result = pr.merge(merge_method="squash")
+        return json.dumps({"merged": result.merged, "sha": result.sha})
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool("close_issue")
+def close_issue(issue_number: int, comment: str = "") -> str:
+    """Close a GitHub issue, optionally with a comment."""
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        issue = repo.get_issue(int(issue_number))
+        if comment:
+            issue.create_comment(comment)
+        issue.edit(state="closed")
+        return json.dumps({"closed": issue_number})
     except Exception as e:
         return f"Error: {e}"
