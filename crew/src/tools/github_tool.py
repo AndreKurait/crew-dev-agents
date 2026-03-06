@@ -1,5 +1,6 @@
 import json
 import os
+import traceback
 
 from crewai.tools import tool
 from github import Github, Auth
@@ -23,9 +24,22 @@ def _repo_name() -> str:
     return url.rstrip("/").split("github.com/")[-1].removesuffix(".git")
 
 
+def _safe(fn):
+    """Wrap tool function to catch exceptions and return error strings."""
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            return f"Error: {type(e).__name__}: {e}"
+    wrapper.__name__ = fn.__name__
+    wrapper.__doc__ = fn.__doc__
+    return wrapper
+
+
 @tool("list_open_issues")
+@_safe
 def list_open_issues(limit: int = 20) -> str:
-    """List open issues from the target repo that need triage (no labels). Returns JSON."""
+    """List open issues from the target repo. Returns JSON array."""
     gh = _get_github()
     repo = gh.get_repo(_repo_name())
     issues = []
@@ -37,14 +51,14 @@ def list_open_issues(limit: int = 20) -> str:
             "title": issue.title,
             "body": (issue.body or "")[:500],
             "labels": [l.name for l in issue.labels],
-            "assignees": [a.login for a in issue.assignees],
         })
     return json.dumps(issues) if issues else "No open issues found."
 
 
 @tool("list_open_prs")
+@_safe
 def list_open_prs(limit: int = 10) -> str:
-    """List open PRs awaiting review. Returns JSON."""
+    """List open PRs awaiting review. Returns JSON array."""
     gh = _get_github()
     repo = gh.get_repo(_repo_name())
     prs = []
@@ -59,27 +73,28 @@ def list_open_prs(limit: int = 10) -> str:
 
 
 @tool("add_issue_comment")
+@_safe
 def add_issue_comment(issue_number: int, comment: str) -> str:
     """Add a comment to a GitHub issue."""
     gh = _get_github()
     repo = gh.get_repo(_repo_name())
-    issue = repo.get_issue(int(issue_number))
-    c = issue.create_comment(comment)
+    c = repo.get_issue(int(issue_number)).create_comment(comment)
     return json.dumps({"comment_id": c.id, "url": c.html_url})
 
 
 @tool("add_labels")
+@_safe
 def add_labels(issue_number: int, labels: str) -> str:
     """Add labels to a GitHub issue. Labels is a comma-separated string."""
     gh = _get_github()
     repo = gh.get_repo(_repo_name())
-    issue = repo.get_issue(int(issue_number))
     label_list = [l.strip() for l in labels.split(",")]
-    issue.add_to_labels(*label_list)
+    repo.get_issue(int(issue_number)).add_to_labels(*label_list)
     return json.dumps({"added": label_list})
 
 
 @tool("create_issue")
+@_safe
 def create_issue(title: str, body: str, labels: str = "") -> str:
     """Create a new GitHub issue. Labels is optional comma-separated string."""
     gh = _get_github()
@@ -90,6 +105,7 @@ def create_issue(title: str, body: str, labels: str = "") -> str:
 
 
 @tool("get_repo_contents")
+@_safe
 def get_repo_contents(path: str = "") -> str:
     """List files/dirs at a path in the repo. Empty path = root."""
     gh = _get_github()
@@ -101,8 +117,9 @@ def get_repo_contents(path: str = "") -> str:
 
 
 @tool("read_file")
+@_safe
 def read_file(path: str) -> str:
-    """Read a file from the repo. Returns the file content."""
+    """Read a file from the repo. Returns the file content (max 5000 chars)."""
     gh = _get_github()
     repo = gh.get_repo(_repo_name())
     content = repo.get_contents(path)
