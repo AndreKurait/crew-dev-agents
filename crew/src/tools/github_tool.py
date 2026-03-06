@@ -1,6 +1,5 @@
 import json
 import os
-import uuid
 
 from crewai.tools import tool
 from github import Github, Auth, GithubException
@@ -43,7 +42,7 @@ def list_open_issues(limit: int = 20) -> str:
 
 @tool("list_open_prs")
 def list_open_prs(limit: int = 10) -> str:
-    """List open PRs awaiting review. Returns JSON array."""
+    """List open PRs. Returns JSON array."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
@@ -57,22 +56,12 @@ def list_open_prs(limit: int = 10) -> str:
         return f"Error: {e}"
 
 
-@tool("add_issue_comment")
-def add_issue_comment(issue_number: int, comment: str) -> str:
-    """Add a comment to a GitHub issue."""
-    try:
-        gh = _get_github()
-        repo = gh.get_repo(_repo_name())
-        c = repo.get_issue(int(issue_number)).create_comment(comment)
-        return json.dumps({"comment_id": c.id, "url": c.html_url})
-    except Exception as e:
-        return f"Error: {e}"
-
-
 @tool("add_labels")
-def add_labels(issue_number: int, labels: str) -> str:
-    """Add labels to a GitHub issue. Labels is a comma-separated string."""
+def add_labels(issue_number: int = 0, labels: str = "enhancement") -> str:
+    """Add labels to a GitHub issue. issue_number is required. labels is comma-separated."""
     try:
+        if issue_number == 0:
+            return "Error: issue_number is required"
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
         label_list = [l.strip() for l in labels.split(",")]
@@ -83,8 +72,8 @@ def add_labels(issue_number: int, labels: str) -> str:
 
 
 @tool("create_issue")
-def create_issue(title: str, body: str, labels: str = "") -> str:
-    """Create a new GitHub issue. Returns JSON with issue number and URL."""
+def create_issue(title: str = "Untitled", body: str = "No description", labels: str = "") -> str:
+    """Create a new GitHub issue. All params have defaults but title and body should be provided."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
@@ -97,7 +86,7 @@ def create_issue(title: str, body: str, labels: str = "") -> str:
 
 @tool("get_repo_contents")
 def get_repo_contents(path: str = "") -> str:
-    """List files and directories at a path in the repo."""
+    """List files and directories at a path in the repo. Empty path = root."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
@@ -110,7 +99,7 @@ def get_repo_contents(path: str = "") -> str:
 
 
 @tool("read_file")
-def read_file(path: str) -> str:
+def read_file(path: str = "README.md") -> str:
     """Read a file from the repo. Returns content (max 5000 chars)."""
     try:
         gh = _get_github()
@@ -121,10 +110,25 @@ def read_file(path: str) -> str:
         return f"Error: {e}"
 
 
-@tool("create_or_update_file")
-def create_or_update_file(path: str, content: str, message: str, branch: str = "main") -> str:
-    """Create or update a file in the repo on the given branch. Returns JSON with commit SHA."""
+@tool("create_branch")
+def create_branch(branch_name: str = "auto/improvement") -> str:
+    """Create a new branch from main. Provide a descriptive branch_name."""
     try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        main_ref = repo.get_git_ref("heads/main")
+        repo.create_git_ref(f"refs/heads/{branch_name}", main_ref.object.sha)
+        return json.dumps({"branch": branch_name, "sha": main_ref.object.sha})
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool("create_or_update_file")
+def create_or_update_file(path: str = "", content: str = "", message: str = "auto update", branch: str = "main") -> str:
+    """Create or update a file on a branch. path and content are required."""
+    try:
+        if not path or not content:
+            return "Error: path and content are required"
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
         try:
@@ -138,22 +142,9 @@ def create_or_update_file(path: str, content: str, message: str, branch: str = "
         return f"Error: {e}"
 
 
-@tool("create_branch")
-def create_branch(branch_name: str) -> str:
-    """Create a new branch from main. Returns JSON with branch ref."""
-    try:
-        gh = _get_github()
-        repo = gh.get_repo(_repo_name())
-        main_ref = repo.get_git_ref("heads/main")
-        repo.create_git_ref(f"refs/heads/{branch_name}", main_ref.object.sha)
-        return json.dumps({"branch": branch_name, "sha": main_ref.object.sha})
-    except Exception as e:
-        return f"Error: {e}"
-
-
 @tool("create_pull_request")
-def create_pull_request(title: str, body: str, head_branch: str, base_branch: str = "main") -> str:
-    """Create a pull request. Returns JSON with PR number and URL."""
+def create_pull_request(title: str = "Auto improvement", body: str = "Automated PR", head_branch: str = "auto/improvement", base_branch: str = "main") -> str:
+    """Create a pull request from head_branch to base_branch."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
@@ -164,9 +155,11 @@ def create_pull_request(title: str, body: str, head_branch: str, base_branch: st
 
 
 @tool("merge_pull_request")
-def merge_pull_request(pr_number: int) -> str:
-    """Merge a pull request by number. Returns JSON with merge status."""
+def merge_pull_request(pr_number: int = 0) -> str:
+    """Merge a pull request by number."""
     try:
+        if pr_number == 0:
+            return "Error: pr_number is required"
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
         pr = repo.get_pull(int(pr_number))
@@ -177,9 +170,11 @@ def merge_pull_request(pr_number: int) -> str:
 
 
 @tool("close_issue")
-def close_issue(issue_number: int, comment: str = "") -> str:
+def close_issue(issue_number: int = 0, comment: str = "") -> str:
     """Close a GitHub issue, optionally with a comment."""
     try:
+        if issue_number == 0:
+            return "Error: issue_number is required"
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
         issue = repo.get_issue(int(issue_number))
