@@ -21,21 +21,20 @@ def load_yaml(name: str) -> dict:
 
 def build_crew(repo_url: str | None = None) -> Crew:
     model = os.environ.get("BEDROCK_MODEL", "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0")
-    llm = LLM(model=model)
+    llm = LLM(
+        model=model,
+        tool_choice="auto",
+    )
     repo = repo_url or os.environ.get("REPO_URL", "")
 
     agents_cfg = load_yaml("agents.yaml")
     tasks_cfg = load_yaml("tasks.yaml")
 
-    read_tools = [list_open_issues, list_open_prs, get_repo_contents, read_file]
-    write_tools = [create_issue, add_issue_comment, add_labels, close_issue,
-                   create_branch, create_or_update_file, create_pull_request, merge_pull_request]
-
     tool_map = {
-        "triager": read_tools + [create_issue, add_issue_comment, add_labels],
-        "reviewer": read_tools + [add_issue_comment, create_pull_request],
-        "coder": read_tools + write_tools,
-        "evolver": read_tools + write_tools + [read_recent_metrics, store_metrics],
+        "triager": [list_open_issues, add_labels, create_issue],
+        "reviewer": [get_repo_contents, read_file, create_issue],
+        "coder": [list_open_issues, read_file, create_branch, create_or_update_file, create_pull_request, merge_pull_request, close_issue],
+        "evolver": [read_file, create_branch, create_or_update_file, create_pull_request, merge_pull_request],
     }
 
     agents = {}
