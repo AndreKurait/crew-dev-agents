@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: self-config
+  namespace: crewai
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  REPO_URL: "https://github.com/AndreKurait/crew-dev-agents"
+  BEDROCK_MODEL: "bedrock/anthropic.claude-opus-4-6-v1:0"
+  BEDROCK_REGION: "us-west-2"
+  GITHUB_SECRET_NAME: "crew-dev-agents/github-token"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: self-crew
+  namespace: crewai
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  schedule: "0 */2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          serviceAccountName: crewai-sa
+          restartPolicy: Never
+          containers:
+            - name: crew
+              image: 143555787841.dkr.ecr.us-west-2.amazonaws.com/crew-dev-agents/crew:latest
+              envFrom:
+                - configMapRef:
+                    name: self-config
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "2Gi"

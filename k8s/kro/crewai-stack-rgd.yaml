@@ -21,21 +21,6 @@ spec:
       cronJobName: ${cronjob.metadata.name}
 
   resources:
-    - id: crewns
-      template:
-        apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: crewai
-
-    - id: serviceaccount
-      template:
-        apiVersion: v1
-        kind: ServiceAccount
-        metadata:
-          name: crewai-sa
-          namespace: crewai
-
     - id: configmap
       template:
         apiVersion: v1
