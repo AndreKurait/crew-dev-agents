@@ -1,13 +1,11 @@
 import json
 import os
-import traceback
 
 from crewai.tools import tool
 from github import Github, Auth
 
 
 def _get_github() -> Github:
-    """Get authenticated GitHub client."""
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         import boto3
@@ -24,107 +22,99 @@ def _repo_name() -> str:
     return url.rstrip("/").split("github.com/")[-1].removesuffix(".git")
 
 
-def _safe(fn):
-    """Wrap tool function to catch exceptions and return error strings."""
-    def wrapper(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception as e:
-            return f"Error: {type(e).__name__}: {e}"
-    wrapper.__name__ = fn.__name__
-    wrapper.__doc__ = fn.__doc__
-    return wrapper
-
-
 @tool("list_open_issues")
-@_safe
 def list_open_issues(limit: int = 20) -> str:
     """List open issues from the target repo. Returns JSON array."""
-    gh = _get_github()
-    repo = gh.get_repo(_repo_name())
-    issues = []
-    for issue in repo.get_issues(state="open", sort="created", direction="desc"):
-        if len(issues) >= limit:
-            break
-        if issue.pull_request:
-            continue
-        issues.append({
-            "number": issue.number,
-            "title": issue.title,
-            "body": (issue.body or "")[:500],
-            "labels": [l.name for l in issue.labels],
-        })
-    return json.dumps(issues) if issues else "No open issues found."
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        issues = []
+        for issue in repo.get_issues(state="open", sort="created", direction="desc"):
+            if len(issues) >= limit:
+                break
+            if issue.pull_request:
+                continue
+            issues.append({"number": issue.number, "title": issue.title, "body": (issue.body or "")[:500], "labels": [l.name for l in issue.labels]})
+        return json.dumps(issues) if issues else "No open issues found."
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @tool("list_open_prs")
-@_safe
 def list_open_prs(limit: int = 10) -> str:
     """List open PRs awaiting review. Returns JSON array."""
-    gh = _get_github()
-    repo = gh.get_repo(_repo_name())
-    prs = []
-    for pr in repo.get_pulls(state="open", sort="created", direction="desc"):
-        if len(prs) >= limit:
-            break
-        prs.append({
-            "number": pr.number,
-            "title": pr.title,
-            "body": (pr.body or "")[:500],
-            "user": pr.user.login,
-        })
-    return json.dumps(prs) if prs else "No open PRs found."
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        prs = []
+        for pr in repo.get_pulls(state="open", sort="created", direction="desc"):
+            if len(prs) >= limit:
+                break
+            prs.append({"number": pr.number, "title": pr.title, "body": (pr.body or "")[:500], "user": pr.user.login})
+        return json.dumps(prs) if prs else "No open PRs found."
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @tool("add_issue_comment")
-@_safe
 def add_issue_comment(issue_number: int, comment: str) -> str:
     """Add a comment to a GitHub issue."""
-    gh = _get_github()
-    repo = gh.get_repo(_repo_name())
-    c = repo.get_issue(int(issue_number)).create_comment(comment)
-    return json.dumps({"comment_id": c.id, "url": c.html_url})
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        c = repo.get_issue(int(issue_number)).create_comment(comment)
+        return json.dumps({"comment_id": c.id, "url": c.html_url})
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @tool("add_labels")
-@_safe
 def add_labels(issue_number: int, labels: str) -> str:
     """Add labels to a GitHub issue. Labels is a comma-separated string."""
-    gh = _get_github()
-    repo = gh.get_repo(_repo_name())
-    label_list = [l.strip() for l in labels.split(",")]
-    repo.get_issue(int(issue_number)).add_to_labels(*label_list)
-    return json.dumps({"added": label_list})
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        label_list = [l.strip() for l in labels.split(",")]
+        repo.get_issue(int(issue_number)).add_to_labels(*label_list)
+        return json.dumps({"added": label_list})
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @tool("create_issue")
-@_safe
 def create_issue(title: str, body: str, labels: str = "") -> str:
-    """Create a new GitHub issue. Labels is optional comma-separated string."""
-    gh = _get_github()
-    repo = gh.get_repo(_repo_name())
-    label_list = [l.strip() for l in labels.split(",") if l.strip()] if labels else []
-    issue = repo.create_issue(title=title, body=body, labels=label_list)
-    return json.dumps({"number": issue.number, "url": issue.html_url})
+    """Create a new GitHub issue on the target repo. Returns JSON with issue number and URL."""
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        label_list = [l.strip() for l in labels.split(",") if l.strip()] if labels else []
+        issue = repo.create_issue(title=title, body=body, labels=label_list)
+        return json.dumps({"number": issue.number, "url": issue.html_url})
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @tool("get_repo_contents")
-@_safe
 def get_repo_contents(path: str = "") -> str:
-    """List files/dirs at a path in the repo. Empty path = root."""
-    gh = _get_github()
-    repo = gh.get_repo(_repo_name())
-    contents = repo.get_contents(path)
-    if not isinstance(contents, list):
-        contents = [contents]
-    return json.dumps([{"name": c.name, "type": c.type, "path": c.path} for c in contents])
+    """List files and directories at a path in the repo. Empty path lists root."""
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        contents = repo.get_contents(path)
+        if not isinstance(contents, list):
+            contents = [contents]
+        return json.dumps([{"name": c.name, "type": c.type, "path": c.path} for c in contents])
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @tool("read_file")
-@_safe
 def read_file(path: str) -> str:
     """Read a file from the repo. Returns the file content (max 5000 chars)."""
-    gh = _get_github()
-    repo = gh.get_repo(_repo_name())
-    content = repo.get_contents(path)
-    return content.decoded_content.decode("utf-8")[:5000]
+    try:
+        gh = _get_github()
+        repo = gh.get_repo(_repo_name())
+        content = repo.get_contents(path)
+        return content.decoded_content.decode("utf-8")[:5000]
+    except Exception as e:
+        return f"Error: {e}"
