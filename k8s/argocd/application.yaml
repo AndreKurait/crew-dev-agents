@@ -11,7 +11,7 @@ spec:
     path: k8s
     directory:
       recurse: true
-      exclude: "argocd/*"
+      exclude: "{argocd/*,instances-manual/*}"
   destination:
     # For EKS managed ArgoCD, use the cluster ARN (not https://kubernetes.default.svc)
     server: <CLUSTER_ARN>
