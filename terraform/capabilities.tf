@@ -59,3 +59,22 @@ resource "awscc_eks_capability" "argocd" {
     }
   }
 }
+
+# ArgoCD needs cluster admin to deploy resources to this cluster
+resource "aws_eks_access_entry" "argocd" {
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = aws_iam_role.capability_argocd.arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "argocd_admin" {
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = aws_iam_role.capability_argocd.arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.argocd]
+}
