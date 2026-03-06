@@ -12,5 +12,5 @@ spec:
   schedule: "0 */6 * * *"
   bedrockModel: "bedrock/anthropic.claude-opus-4-6-v1:0"
   bedrockRegion: "us-west-2"
-  crewImage: "<ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/crew-dev-agents/crew:latest"
+  crewImage: "143555787841.dkr.ecr.us-west-2.amazonaws.com/crew-dev-agents/crew:latest"
   githubSecretName: "crew-dev-agents/github-token"
