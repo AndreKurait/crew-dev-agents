@@ -24,6 +24,7 @@ def build_crew(repo_url: str | None = None) -> Crew:
     llm = LLM(
         model=model,
         tool_choice="auto",
+        provider="litellm",
     )
     repo = repo_url or os.environ.get("REPO_URL", "")
 
