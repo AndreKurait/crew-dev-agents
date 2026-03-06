@@ -44,3 +44,9 @@ variable "github_repo_path" {
   type        = string
   default     = "k8s"
 }
+
+variable "idc_instance_arn" {
+  description = "IAM Identity Center instance ARN for ArgoCD capability"
+  type        = string
+  default     = ""
+}

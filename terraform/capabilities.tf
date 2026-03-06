@@ -40,14 +40,22 @@ resource "awscc_eks_capability" "kro" {
 }
 
 # -----------------------------------------------------------------------------
-# ArgoCD Capability — created via CLI (requires IDC config not available here)
-# Run: aws eks create-capability --cluster-name crew-dev-agents \
-#        --capability-name argocd --type ARGOCD \
-#        --role-arn <argocd_role_arn> \
-#        --configuration '{"argoCdConfiguration":{"namespace":"argocd"}}' \
-#        --region us-west-2
+# ArgoCD Capability (requires IAM Identity Center)
 # -----------------------------------------------------------------------------
-# ArgoCD capability requires IAM Identity Center integration.
-# If you don't have IDC, self-manage ArgoCD via Helm instead:
-#   helm repo add argo https://argoproj.github.io/argo-helm
-#   helm install argocd argo/argo-cd -n argocd --create-namespace
+resource "awscc_eks_capability" "argocd" {
+  cluster_name              = aws_eks_cluster.this.name
+  capability_name           = "argocd"
+  type                      = "ARGOCD"
+  role_arn                  = aws_iam_role.capability_argocd.arn
+  delete_propagation_policy = "RETAIN"
+
+  configuration = {
+    argo_cd = {
+      namespace = "argocd"
+      aws_idc = {
+        idc_instance_arn = var.idc_instance_arn
+        idc_region       = var.aws_region
+      }
+    }
+  }
+}
