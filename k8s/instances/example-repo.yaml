@@ -4,6 +4,8 @@ kind: CrewAIStack
 metadata:
   name: example-repo
   namespace: crewai
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   name: example-repo
   repoUrl: https://github.com/AndreKurait/example-target-repo

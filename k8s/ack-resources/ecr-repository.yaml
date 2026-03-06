@@ -1,6 +1,8 @@
 apiVersion: ecr.services.k8s.aws/v1alpha1
 kind: Repository
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   name: crew-dev-agents-images
   namespace: crewai
 spec:

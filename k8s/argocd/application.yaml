@@ -11,8 +11,10 @@ spec:
     path: k8s
     directory:
       recurse: true
+      exclude: "argocd/*"
   destination:
-    server: https://kubernetes.default.svc
+    # For EKS managed ArgoCD, use the cluster ARN (not https://kubernetes.default.svc)
+    server: <CLUSTER_ARN>
     namespace: crewai
   syncPolicy:
     automated:

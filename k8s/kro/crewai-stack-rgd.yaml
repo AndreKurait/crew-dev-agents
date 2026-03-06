@@ -2,6 +2,8 @@ apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
   name: crewai-stack
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   schema:
     apiVersion: kro.run/v1alpha1

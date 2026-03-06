@@ -1,6 +1,8 @@
 apiVersion: s3.services.k8s.aws/v1alpha1
 kind: Bucket
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   name: crew-dev-agents-artifacts
   namespace: crewai
 spec:
