@@ -16,7 +16,7 @@ def load_yaml(name: str) -> dict:
 
 
 def build_crew(repo_url: str | None = None) -> Crew:
-    model = os.environ.get("BEDROCK_MODEL", "bedrock/anthropic.claude-opus-4-6-v1")
+    model = os.environ.get("BEDROCK_MODEL", "bedrock/us.anthropic.claude-opus-4-6-v1")
     llm = LLM(model=model)
     repo = repo_url or os.environ.get("REPO_URL", "")
 

@@ -7,7 +7,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 data:
   REPO_URL: "https://github.com/AndreKurait/crew-dev-agents"
-  BEDROCK_MODEL: "bedrock/anthropic.claude-opus-4-6-v1"
+  BEDROCK_MODEL: "bedrock/us.anthropic.claude-opus-4-6-v1"
   BEDROCK_REGION: "us-west-2"
   GITHUB_SECRET_NAME: "crew-dev-agents/github-token"
 ---
