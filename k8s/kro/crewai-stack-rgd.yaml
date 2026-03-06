@@ -21,7 +21,7 @@ spec:
       cronJobName: ${cronjob.metadata.name}
 
   resources:
-    - id: namespace
+    - id: crewns
       template:
         apiVersion: v1
         kind: Namespace
