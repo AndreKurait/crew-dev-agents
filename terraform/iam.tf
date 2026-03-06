@@ -163,8 +163,8 @@ resource "aws_iam_role_policy" "crewai_bedrock" {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
         Resource = [
-          "arn:aws:bedrock:${var.aws_region}::foundation-model/anthropic.*",
-          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/*anthropic*",
+          "arn:aws:bedrock:*::foundation-model/anthropic.*",
+          "arn:aws:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*anthropic*",
         ]
       },
       {
