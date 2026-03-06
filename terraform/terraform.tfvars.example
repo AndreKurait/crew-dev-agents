@@ -1,0 +1,8 @@
+aws_region          = "us-west-2"
+project_name        = "crew-dev-agents"
+cluster_name        = "crew-dev-agents"
+cluster_version     = "1.32"
+vpc_cidr            = "10.0.0.0/16"
+admin_principal_arn = "arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>"
+github_repo_url     = "https://github.com/AndreKurait/crew-dev-agents.git"
+github_repo_path    = "k8s"

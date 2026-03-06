@@ -1,0 +1,18 @@
+apiVersion: s3.services.k8s.aws/v1alpha1
+kind: Bucket
+metadata:
+  name: crew-dev-agents-artifacts
+  namespace: crewai
+spec:
+  name: crew-dev-agents-artifacts
+  versioningConfiguration:
+    status: Enabled
+  encryption:
+    rules:
+      - applyServerSideEncryptionByDefault:
+          sseAlgorithm: AES256
+  tags:
+    - key: Project
+      value: crew-dev-agents
+    - key: ManagedBy
+      value: ack

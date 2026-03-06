@@ -1,0 +1,14 @@
+# Example: point the crew at a target repo
+apiVersion: kro.run/v1alpha1
+kind: CrewAIStack
+metadata:
+  name: example-repo
+  namespace: crewai
+spec:
+  name: example-repo
+  repoUrl: https://github.com/AndreKurait/example-target-repo
+  schedule: "0 */6 * * *"
+  bedrockModel: "bedrock/anthropic.claude-opus-4-6-v1:0"
+  bedrockRegion: "us-west-2"
+  crewImage: "<ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/crew-dev-agents/crew:latest"
+  githubSecretName: "crew-dev-agents/github-token"

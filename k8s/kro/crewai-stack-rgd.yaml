@@ -1,0 +1,80 @@
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: crewai-stack
+spec:
+  schema:
+    apiVersion: kro.run/v1alpha1
+    kind: CrewAIStack
+    spec:
+      name: string
+      repoUrl: string
+      schedule: string | default="0 */6 * * *"
+      bedrockModel: string | default="bedrock/anthropic.claude-opus-4-6-v1:0"
+      bedrockRegion: string | default="us-west-2"
+      crewImage: string
+      githubSecretName: string | default="crew-dev-agents/github-token"
+    status:
+      ready: ${configmap.metadata.name != ""}
+      cronJobName: ${cronjob.metadata.name}
+
+  resources:
+    - id: namespace
+      template:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: crewai
+
+    - id: serviceaccount
+      template:
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: crewai-sa
+          namespace: crewai
+
+    - id: configmap
+      template:
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: ${schema.spec.name}-config
+          namespace: crewai
+        data:
+          REPO_URL: ${schema.spec.repoUrl}
+          BEDROCK_MODEL: ${schema.spec.bedrockModel}
+          BEDROCK_REGION: ${schema.spec.bedrockRegion}
+          GITHUB_SECRET_NAME: ${schema.spec.githubSecretName}
+
+    - id: cronjob
+      template:
+        apiVersion: batch/v1
+        kind: CronJob
+        metadata:
+          name: ${schema.spec.name}-crew
+          namespace: crewai
+        spec:
+          schedule: ${schema.spec.schedule}
+          concurrencyPolicy: Forbid
+          jobTemplate:
+            spec:
+              backoffLimit: 1
+              activeDeadlineSeconds: 3600
+              template:
+                spec:
+                  serviceAccountName: crewai-sa
+                  restartPolicy: Never
+                  containers:
+                    - name: crew
+                      image: ${schema.spec.crewImage}
+                      envFrom:
+                        - configMapRef:
+                            name: ${schema.spec.name}-config
+                      resources:
+                        requests:
+                          cpu: "500m"
+                          memory: "512Mi"
+                        limits:
+                          cpu: "2"
+                          memory: "2Gi"

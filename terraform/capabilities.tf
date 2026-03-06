@@ -1,0 +1,59 @@
+# -----------------------------------------------------------------------------
+# ACK Capability
+# -----------------------------------------------------------------------------
+resource "awscc_eks_capability" "ack" {
+  cluster_name    = aws_eks_cluster.this.name
+  capability_name = "ack"
+  type            = "ACK"
+  role_arn        = aws_iam_role.capability_ack.arn
+
+  configuration = {
+    ack_configuration = {
+      controller_configs = {
+        "s3"             = { enabled = true }
+        "ecr"            = { enabled = true }
+        "secretsmanager" = { enabled = true }
+        "iam"            = { enabled = true }
+      }
+    }
+  }
+}
+
+# Grant ACK capability access to read K8s secrets (for RDS passwords, etc.)
+resource "aws_eks_access_entry" "ack" {
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = aws_iam_role.capability_ack.arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "ack_secret_reader" {
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = aws_iam_role.capability_ack.arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSSecretReaderPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.ack]
+}
+
+# -----------------------------------------------------------------------------
+# KRO Capability
+# -----------------------------------------------------------------------------
+resource "awscc_eks_capability" "kro" {
+  cluster_name    = aws_eks_cluster.this.name
+  capability_name = "kro"
+  type            = "KRO"
+  role_arn        = aws_iam_role.capability_kro.arn
+}
+
+# -----------------------------------------------------------------------------
+# ArgoCD Capability
+# -----------------------------------------------------------------------------
+resource "awscc_eks_capability" "argocd" {
+  cluster_name    = aws_eks_cluster.this.name
+  capability_name = "argocd"
+  type            = "ARGOCD"
+  role_arn        = aws_iam_role.capability_argocd.arn
+}
