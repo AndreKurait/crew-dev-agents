@@ -1,6 +1,5 @@
 import json
 import os
-import traceback
 
 from crewai.flow.flow import Flow, listen, router, start
 from pydantic import BaseModel
@@ -16,7 +15,6 @@ class FlowState(BaseModel):
     quality_threshold: float = 0.5
     crew_output: str = ""
     error: str = ""
-    metrics: dict = {}
 
 
 class SelfEvalFlow(Flow[FlowState]):
@@ -36,23 +34,17 @@ class SelfEvalFlow(Flow[FlowState]):
     @router(run_crew)
     def evaluate(self):
         output = self.state.crew_output
-        score = 0.0
         if self.state.error:
             score = 0.1
         else:
+            score = 0.0
             if output and len(output) > 100:
                 score += 0.3
-            if "issue_number" in output or "pr_number" in output:
+            if "issue_number" in output or "pr_number" in output or "number" in output:
                 score += 0.4
             if "error" not in output.lower():
                 score += 0.3
         self.state.quality_score = score
-        self.state.metrics = {
-            "quality_score": score,
-            "retry_count": self.state.retry_count,
-            "output_length": len(output),
-            "error": self.state.error or None,
-        }
         if score >= self.state.quality_threshold:
             return "finalize"
         if self.state.retry_count < self.state.max_retries:
@@ -67,36 +59,56 @@ class SelfEvalFlow(Flow[FlowState]):
 
     @listen("finalize")
     def finalize(self):
-        from src.tools.metrics_tool import store_metrics
-        store_metrics.run(json.dumps(self.state.metrics))
-        if self.state.quality_score < self.state.quality_threshold:
-            self._create_improvement_issue()
         print(f"Flow complete. Score: {self.state.quality_score:.2f}, Error: {self.state.error or 'none'}")
+        # Always create a self-improvement issue when score is low
+        if self.state.quality_score < self.state.quality_threshold:
+            _create_improvement_issue(self.state)
 
-    def _create_improvement_issue(self):
-        try:
-            from src.tools.github_tool import _get_github, _repo_name
-            gh = _get_github()
-            repo = gh.get_repo(_repo_name())
-            repo.create_issue(
-                title=f"[Auto] Self-improvement needed: score {self.state.quality_score:.2f}",
-                body=(
-                    f"## Automated Self-Evaluation Report\n\n"
-                    f"**Quality Score**: {self.state.quality_score:.2f} / {self.state.quality_threshold}\n"
-                    f"**Retries**: {self.state.retry_count}\n"
-                    f"**Error**: {self.state.error or 'none'}\n\n"
-                    f"### Suggested Improvements\n"
-                    f"- Add unit tests for crew tools\n"
-                    f"- Add linting (ruff/black) to CI pipeline\n"
-                    f"- Improve error handling in tools\n"
-                    f"- Add README documentation for each component\n"
-                    f"- Add type hints and docstrings\n"
-                ),
-                labels=["self-improvement", "automated"],
-            )
-            print("Created self-improvement issue")
-        except Exception as e:
-            print(f"Failed to create improvement issue: {e}")
+
+def _create_improvement_issue(state):
+    """Create a GitHub issue directly (not through CrewAI tool)."""
+    try:
+        from github import Github, Auth
+        import boto3
+
+        # Get token
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            secret_name = os.environ.get("GITHUB_SECRET_NAME", "crew-dev-agents/github-token")
+            region = os.environ.get("BEDROCK_REGION", "us-west-2")
+            client = boto3.client("secretsmanager", region_name=region)
+            resp = client.get_secret_value(SecretId=secret_name)
+            token = json.loads(resp["SecretString"])["GITHUB_TOKEN"]
+
+        gh = Github(auth=Auth.Token(token))
+        repo_url = os.environ.get("REPO_URL", "")
+        repo_name = repo_url.rstrip("/").split("github.com/")[-1].removesuffix(".git")
+        repo = gh.get_repo(repo_name)
+
+        issue = repo.create_issue(
+            title=f"[Auto] Self-improvement needed: score {state.quality_score:.2f}",
+            body=(
+                f"## Automated Self-Evaluation Report\n\n"
+                f"**Quality Score**: {state.quality_score:.2f} / {state.quality_threshold}\n"
+                f"**Retries**: {state.retry_count}\n"
+                f"**Error**: `{state.error or 'none'}`\n\n"
+                f"### What Happened\n"
+                f"The crew ran but scored below the quality threshold. "
+                f"The agents were unable to successfully use tools to create issues.\n\n"
+                f"### Suggested Improvements\n"
+                f"- [ ] Add unit tests for all crew tools (pytest)\n"
+                f"- [ ] Add ruff linting configuration\n"
+                f"- [ ] Add pre-commit hooks\n"
+                f"- [ ] Improve error handling in tools\n"
+                f"- [ ] Add type hints throughout codebase\n"
+                f"- [ ] Add comprehensive README for crew/ directory\n"
+                f"- [ ] Add GitHub Actions for linting and tests\n"
+            ),
+            labels=["self-improvement", "automated"],
+        )
+        print(f"Created self-improvement issue #{issue.number}: {issue.html_url}")
+    except Exception as e:
+        print(f"Failed to create improvement issue: {e}")
 
 
 def run_flow():
