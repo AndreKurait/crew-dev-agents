@@ -1,42 +1,45 @@
 triage_issues:
   description: >
-    Fetch open issues from the target repo that lack labels or assignees.
-    For each issue: analyze content, assign appropriate labels (bug, feature,
-    question, good-first-issue, etc.), set priority, and add a triage comment
-    summarizing the assessment.
+    Check the target repo for open issues. If issues exist, triage them
+    (add labels, priority comments). If NO issues exist, read the repo
+    structure and key files (README.md, pyproject.toml, Dockerfile, crew/src/)
+    to identify what's missing, then create 2-3 specific improvement issues.
+    Focus on: missing tests, missing linting, missing CI checks, documentation gaps.
   expected_output: >
-    JSON list of triaged issues with: issue_number, title, assigned_labels,
-    priority (P0-P3), triage_comment, and duplicate_of (if applicable).
+    JSON with: issues_triaged (count), issues_created (list with number, title).
   agent: triager
 
-review_prs:
+review_code:
   description: >
-    Fetch open PRs awaiting review. For each PR: read the full diff and
-    related files, check for bugs, security issues, and style violations.
-    Post a review with inline comments and an overall assessment.
+    Read the crew source code files (crew/src/crew.py, crew/src/tools/github_tool.py,
+    crew/src/tools/metrics_tool.py, crew/src/flows/self_eval_flow.py).
+    Identify code quality issues: missing error handling, missing type hints,
+    missing docstrings, potential bugs. Create a GitHub issue summarizing
+    your code review findings with specific file:issue pairs.
   expected_output: >
-    JSON list of reviewed PRs with: pr_number, verdict (approve/request_changes),
-    comments list with file/line/message, and summary.
+    JSON with: files_reviewed (list), issues_found (count), issue_created (number, url).
   agent: reviewer
 
 implement_fix:
   description: >
-    Pick the highest-priority triaged issue that is labeled as a bug.
-    Read the relevant code, implement a fix, and create a PR with a clear
-    description linking to the issue.
+    Check for open issues labeled 'good-first-issue' or 'self-improvement'.
+    If any exist, describe what code changes would fix the highest priority one.
+    If no actionable issues exist, create an issue proposing to add a
+    pyproject.toml [tool.ruff] linting configuration and a basic test file.
   expected_output: >
-    JSON with: issue_number, pr_number, files_changed, description, and
-    branch_name.
+    JSON with: issue_addressed (number or null), proposed_changes (description).
   agent: coder
 
 evaluate_and_evolve:
   description: >
-    Read performance metrics from S3 (triage accuracy, PR acceptance rate,
-    review quality). Analyze trends over the last 5 runs. If any metric
-    is below threshold, propose specific changes to agents.yaml or tasks.yaml
-    and create a PR on the agent platform repo.
+    Read the repo structure, README.md, and the crew config files
+    (crew/config/agents.yaml, crew/config/tasks.yaml). Evaluate what's
+    working and what needs improvement. Create a GitHub issue titled
+    "[Evolution] Crew improvement plan" with specific, actionable items:
+    1. What tests to add (pytest structure, what to test)
+    2. What linting to add (ruff config)
+    3. What documentation to improve
+    4. How to make the crew more effective
   expected_output: >
-    JSON with: metrics_summary, below_threshold (list), proposed_changes
-    (list of {file, change_description, new_content}), and evolution_pr_url
-    (if created).
+    JSON with: improvements_proposed (list), issue_created (number, url).
   agent: evolver
