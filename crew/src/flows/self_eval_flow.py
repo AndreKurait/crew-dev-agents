@@ -59,10 +59,11 @@ class SelfEvalFlow(Flow[FlowState]):
 
     @listen("finalize")
     def finalize(self):
-        print(f"Flow complete. Score: {self.state.quality_score:.2f}, Error: {self.state.error or 'none'}")
         # Always create a self-improvement issue when score is low
         if self.state.quality_score < self.state.quality_threshold:
+            print(f"Score {self.state.quality_score:.2f} < threshold {self.state.quality_threshold}, creating improvement issue...")
             _create_improvement_issue(self.state)
+        print(f"Flow complete. Score: {self.state.quality_score:.2f}, Error: {self.state.error or 'none'}")
 
 
 def _create_improvement_issue(state):
@@ -108,7 +109,9 @@ def _create_improvement_issue(state):
         )
         print(f"Created self-improvement issue #{issue.number}: {issue.html_url}")
     except Exception as e:
+        import traceback
         print(f"Failed to create improvement issue: {e}")
+        traceback.print_exc()
 
 
 def run_flow():
