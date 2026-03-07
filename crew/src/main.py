@@ -1,6 +1,5 @@
 """
 Agent-as-planner pattern: LLM decides what to do, Python executes it.
-Bypasses CrewAI/Bedrock tool calling bug entirely.
 """
 import json
 import os
@@ -29,40 +28,58 @@ def get_repo():
     return get_github().get_repo(name)
 
 
-def gather_context():
-    """Read repo structure and key files to give the LLM context."""
-    repo = get_repo()
-    ctx = {"files": [], "issues": [], "prs": []}
+def list_all_files(repo, path="", depth=0):
+    """Recursively list all files up to depth 3."""
+    files = []
+    if depth > 3:
+        return files
+    try:
+        for item in repo.get_contents(path):
+            files.append({"path": item.path, "type": item.type})
+            if item.type == "dir" and depth < 3:
+                files.extend(list_all_files(repo, item.path, depth + 1))
+    except Exception:
+        pass
+    return files
 
-    # Repo structure
-    for item in repo.get_contents(""):
-        ctx["files"].append({"path": item.path, "type": item.type})
-    for item in repo.get_contents("crew/src"):
-        ctx["files"].append({"path": item.path, "type": item.type})
+
+def gather_context():
+    """Read repo structure, key files, recent PRs, and issues."""
+    repo = get_repo()
+    ctx = {}
+
+    # Full file tree
+    ctx["all_files"] = list_all_files(repo)
 
     # Read key files
-    key_files = ["README.md", "crew/pyproject.toml", "crew/src/crew.py", "crew/config/agents.yaml", "crew/config/tasks.yaml"]
+    key_files = [
+        "README.md", "crew/pyproject.toml", "crew/Dockerfile",
+        "crew/src/main.py", "crew/src/crew.py",
+        "crew/config/agents.yaml", "crew/config/tasks.yaml",
+        "crew/src/tools/github_tool.py", "crew/src/tools/metrics_tool.py",
+    ]
     ctx["file_contents"] = {}
     for path in key_files:
         try:
             content = repo.get_contents(path)
-            ctx["file_contents"][path] = content.decoded_content.decode("utf-8")[:3000]
+            ctx["file_contents"][path] = content.decoded_content.decode("utf-8")[:2000]
         except Exception:
             pass
 
     # Open issues
+    ctx["open_issues"] = []
     for issue in repo.get_issues(state="open", sort="created", direction="desc"):
         if issue.pull_request:
             continue
-        ctx["issues"].append({"number": issue.number, "title": issue.title, "labels": [l.name for l in issue.labels]})
-        if len(ctx["issues"]) >= 10:
+        ctx["open_issues"].append({"number": issue.number, "title": issue.title})
+        if len(ctx["open_issues"]) >= 10:
             break
 
-    # Open PRs
-    for pr in repo.get_pulls(state="open"):
-        ctx["prs"].append({"number": pr.number, "title": pr.title})
-        if len(ctx["prs"]) >= 5:
-            break
+    # Recent merged PRs (to avoid duplicating work)
+    ctx["recent_prs"] = []
+    for pr in repo.get_pulls(state="closed", sort="updated", direction="desc"):
+        if pr.merged and len(ctx["recent_prs"]) < 15:
+            ctx["recent_prs"].append({"number": pr.number, "title": pr.title})
 
     return ctx
 
@@ -74,53 +91,64 @@ def ask_llm_for_plan(context: dict) -> dict:
     model = os.environ.get("BEDROCK_MODEL", "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0")
     llm = LLM(model=model)
 
-    prompt = f"""You are a developer agent maintaining a GitHub repository.
+    all_file_paths = [f["path"] for f in context["all_files"]]
+    recent_pr_titles = [pr["title"] for pr in context["recent_prs"]]
 
-Here is the current state of the repo:
+    prompt = f"""You are a developer agent that improves a GitHub repository.
 
-FILES: {json.dumps(context['files'])}
+REPO FILE TREE:
+{json.dumps(all_file_paths, indent=2)}
 
-OPEN ISSUES: {json.dumps(context['issues'])}
+RECENT MERGED PRs (DO NOT duplicate these — pick something DIFFERENT):
+{json.dumps(recent_pr_titles, indent=2)}
+
+OPEN ISSUES:
+{json.dumps(context['open_issues'], indent=2)}
 
 KEY FILE CONTENTS:
 {json.dumps(context['file_contents'], indent=2)}
 
-Your job: Pick ONE concrete improvement to make. Choose from:
-1. Add a pytest test file (crew/tests/test_tools.py)
-2. Add ruff linting config to pyproject.toml
-3. Add a crew/README.md with documentation
-4. Fix a bug you see in the code
-5. Improve an agent or task definition
+RULES:
+- Pick ONE improvement that has NOT been done in recent PRs
+- Do NOT add more GitHub tool tests (already done many times)
+- Do NOT add ruff config (already done)
+- Focus on something NEW. Good options:
+  * Add a GitHub Actions workflow for running pytest and ruff
+  * Add crew/README.md documenting how the crew works
+  * Add tests for metrics_tool.py or self_eval_flow.py
+  * Add type hints to a file that's missing them
+  * Add a pre-commit config
+  * Improve the Dockerfile (multi-stage build, non-root user)
+  * Add __init__.py files where missing
+  * Fix any actual bugs you see in the code
 
-Respond with ONLY valid JSON (no markdown, no explanation):
+Respond with ONLY valid JSON (no markdown, no code fences):
 {{
-  "improvement": "short description",
-  "branch_name": "auto/short-name",
+  "improvement": "short description of what you're doing",
+  "branch_name": "auto/descriptive-name",
   "files": [
     {{
       "path": "path/to/file",
-      "content": "full file content here",
-      "message": "commit message"
+      "content": "THE COMPLETE FILE CONTENT",
+      "message": "commit message for this file"
     }}
   ],
-  "pr_title": "PR title",
-  "pr_body": "PR description",
-  "close_issues": [list of issue numbers to close, or empty]
+  "pr_title": "Clear PR title",
+  "pr_body": "Description of what this PR does and why",
+  "close_issues": []
 }}"""
 
     response = llm.call([{"role": "user", "content": prompt}])
-    # Extract JSON from response
     text = str(response)
-    # Find JSON in response
     start = text.find("{")
     end = text.rfind("}") + 1
     if start >= 0 and end > start:
         return json.loads(text[start:end])
-    raise ValueError(f"No JSON found in LLM response: {text[:200]}")
+    raise ValueError(f"No JSON found in LLM response: {text[:500]}")
 
 
 def execute_plan(plan: dict):
-    """Execute the improvement plan: create branch, write files, create PR, merge."""
+    """Execute: create branch, write files, create PR, merge."""
     repo = get_repo()
     branch = plan["branch_name"]
 
@@ -139,7 +167,7 @@ def execute_plan(plan: dict):
         path = file_spec["path"]
         content = file_spec["content"]
         message = file_spec.get("message", f"Update {path}")
-        print(f"Writing: {path}")
+        print(f"  Writing: {path}")
         try:
             existing = repo.get_contents(path, ref=branch)
             repo.update_file(path, message, content, existing.sha, branch=branch)
@@ -147,13 +175,8 @@ def execute_plan(plan: dict):
             repo.create_file(path, message, content, branch=branch)
 
     print(f"Creating PR: {plan['pr_title']}")
-    pr = repo.create_pull(
-        title=plan["pr_title"],
-        body=plan["pr_body"],
-        head=branch,
-        base="main",
-    )
-    print(f"PR #{pr.number}: {pr.html_url}")
+    pr = repo.create_pull(title=plan["pr_title"], body=plan["pr_body"], head=branch, base="main")
+    print(f"  PR #{pr.number}: {pr.html_url}")
 
     print(f"Merging PR #{pr.number}")
     pr.merge(merge_method="squash")
@@ -163,9 +186,9 @@ def execute_plan(plan: dict):
             issue = repo.get_issue(int(issue_num))
             issue.create_comment(f"Fixed by #{pr.number}")
             issue.edit(state="closed")
-            print(f"Closed issue #{issue_num}")
-        except Exception as e:
-            print(f"Failed to close issue #{issue_num}: {e}")
+            print(f"  Closed issue #{issue_num}")
+        except Exception:
+            pass
 
     return pr.number
 
@@ -182,12 +205,12 @@ def main():
     try:
         print("Gathering repo context...")
         context = gather_context()
-        print(f"Found {len(context['files'])} files, {len(context['issues'])} issues, {len(context['prs'])} PRs")
+        print(f"  {len(context['all_files'])} files, {len(context['open_issues'])} issues, {len(context['recent_prs'])} recent PRs")
 
         print("Asking LLM for improvement plan...")
         plan = ask_llm_for_plan(context)
-        print(f"Plan: {plan['improvement']}")
-        print(f"Files to change: {[f['path'] for f in plan['files']]}")
+        print(f"  Plan: {plan['improvement']}")
+        print(f"  Files: {[f['path'] for f in plan['files']]}")
 
         print("Executing plan...")
         pr_num = execute_plan(plan)
@@ -196,17 +219,6 @@ def main():
     except Exception as e:
         print(f"=== FAILED: {e} ===")
         traceback.print_exc()
-        # Create self-improvement issue
-        try:
-            repo = get_repo()
-            repo.create_issue(
-                title=f"[Auto] Self-improvement failed: {type(e).__name__}",
-                body=f"## Error\n```\n{e}\n```\n\n## Traceback\n```\n{traceback.format_exc()[:2000]}\n```",
-                labels=["self-improvement", "automated"],
-            )
-            print("Created failure issue")
-        except Exception:
-            pass
 
 
 if __name__ == "__main__":
