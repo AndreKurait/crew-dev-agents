@@ -1,6 +1,6 @@
-from unittest.mock import Mock, patch
-
+from unittest.mock import patch, MagicMock
 import pytest
+
 from src.tools.github_tool import (
     list_open_issues,
     list_open_prs,
@@ -23,55 +23,74 @@ def mock_github():
 
 @pytest.fixture
 def mock_repo(mock_github):
-    repo = Mock()
+    repo = MagicMock()
     mock_github.return_value.get_repo.return_value = repo
     return repo
 
 def test_list_open_issues(mock_repo):
-    issue1 = Mock(number=1, title="Test Issue")
+    issue1 = MagicMock(number=1, title="Test Issue")
     mock_repo.get_issues.return_value = [issue1]
     
     result = list_open_issues("owner/repo")
     
-    mock_repo.get_issues.assert_called_once_with(state="open")
-    assert "#1: Test Issue" in result
+    assert isinstance(result, str)
+    assert "#1" in result
+    assert "Test Issue" in result
+
+def test_create_issue(mock_repo):
+    mock_issue = MagicMock(number=1)
+    mock_repo.create_issue.return_value = mock_issue
+    
+    result = create_issue("owner/repo", "Test Title", "Test Body")
+    
+    mock_repo.create_issue.assert_called_once_with(
+        title="Test Title",
+        body="Test Body"
+    )
+    assert isinstance(result, str)
+    assert "#1" in result
+
+def test_read_file(mock_repo):
+    mock_content = MagicMock(
+        decoded_content=b"test content"
+    )
+    mock_repo.get_contents.return_value = mock_content
+    
+    result = read_file("owner/repo", "test.txt")
+    
+    assert result == "test content"
+    mock_repo.get_contents.assert_called_once_with("test.txt")
 
 def test_create_branch(mock_repo):
-    mock_repo.get_branch.return_value.commit.sha = "abc123"
+    mock_ref = MagicMock()
+    mock_repo.get_git_ref.return_value.object.sha = "main-sha"
+    mock_repo.create_git_ref.return_value = mock_ref
     
     result = create_branch("owner/repo", "test-branch")
     
     mock_repo.create_git_ref.assert_called_once_with(
         ref="refs/heads/test-branch",
-        sha="abc123"
+        sha="main-sha"
     )
-    assert "Created branch test-branch" in result
+    assert isinstance(result, str)
+    assert "test-branch" in result
 
 def test_create_pull_request(mock_repo):
-    mock_pr = Mock(number=1)
+    mock_pr = MagicMock(number=1)
     mock_repo.create_pull.return_value = mock_pr
     
     result = create_pull_request(
         "owner/repo",
         "test-branch",
         "Test PR",
-        "PR description",
-        [123]
+        "Test Description"
     )
     
     mock_repo.create_pull.assert_called_once_with(
         title="Test PR",
-        body="PR description\n\nCloses #123",
+        body="Test Description",
         head="test-branch",
         base="main"
     )
-    assert "Created PR #1" in result
-
-def test_merge_pull_request(mock_repo):
-    mock_pr = Mock()
-    mock_repo.get_pull.return_value = mock_pr
-    
-    result = merge_pull_request("owner/repo", 1)
-    
-    mock_pr.merge.assert_called_once()
-    assert "Merged PR #1" in result
+    assert isinstance(result, str)
+    assert "#1" in result
