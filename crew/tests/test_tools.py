@@ -1,5 +1,5 @@
+from unittest.mock import patch, Mock
 import pytest
-from unittest.mock import MagicMock, patch
 
 from src.tools.github_tool import (
     list_open_issues,
@@ -18,67 +18,72 @@ from src.tools.github_tool import (
 
 @pytest.fixture
 def mock_github():
-    with patch('github.Github') as mock:
-        mock_repo = MagicMock()
+    with patch('src.tools.github_tool.Github') as mock:
+        mock_repo = Mock()
         mock.return_value.get_repo.return_value = mock_repo
         yield mock, mock_repo
 
 def test_list_open_issues(mock_github):
     _, mock_repo = mock_github
-    mock_issue = MagicMock()
+    mock_issue = Mock()
     mock_issue.number = 1
     mock_issue.title = "Test Issue"
     mock_issue.body = "Issue body"
     mock_repo.get_issues.return_value = [mock_issue]
 
-    result = list_open_issues()
-    assert len(result) == 1
-    assert result[0]['number'] == 1
-    assert result[0]['title'] == "Test Issue"
+    issues = list_open_issues("owner/repo")
+    assert len(issues) == 1
+    assert "#1: Test Issue" in issues
 
 def test_create_issue(mock_github):
     _, mock_repo = mock_github
-    mock_issue = MagicMock()
+    mock_issue = Mock()
     mock_issue.number = 2
     mock_repo.create_issue.return_value = mock_issue
 
-    result = create_issue("New Issue", "Issue Description")
-    assert result == 2
+    result = create_issue(
+        "owner/repo",
+        "New Issue",
+        "Issue description",
+        labels=["bug"],
+    )
+    assert "Created issue #2" in result
     mock_repo.create_issue.assert_called_once_with(
         title="New Issue",
-        body="Issue Description"
+        body="Issue description",
+        labels=["bug"],
     )
 
 def test_create_branch(mock_github):
     _, mock_repo = mock_github
-    mock_ref = MagicMock()
-    mock_repo.get_git_ref.return_value.object.sha = "main-sha"
-    mock_repo.create_git_ref.return_value = mock_ref
+    mock_ref = Mock()
+    mock_ref.object.sha = "main-sha"
+    mock_repo.get_git_ref.return_value = mock_ref
 
-    result = create_branch("feature/test")
-    assert result is True
+    result = create_branch("owner/repo", "fix/test-branch")
+    assert "Created branch fix/test-branch" in result
     mock_repo.create_git_ref.assert_called_once_with(
-        ref="refs/heads/feature/test",
-        sha="main-sha"
+        ref="refs/heads/fix/test-branch",
+        sha="main-sha",
     )
 
 def test_create_pull_request(mock_github):
     _, mock_repo = mock_github
-    mock_pr = MagicMock()
+    mock_pr = Mock()
     mock_pr.number = 3
     mock_repo.create_pull.return_value = mock_pr
 
     result = create_pull_request(
-        "feature/test",
+        "owner/repo",
+        "fix/test-branch",
         "main",
         "Test PR",
-        "PR Description",
-        [1]
+        "PR description\n\nFixes #1",
     )
-    assert result == 3
+    assert "Created PR #3" in result
     mock_repo.create_pull.assert_called_once_with(
         title="Test PR",
-        body="PR Description\n\nCloses #1",
-        head="feature/test",
-        base="main"
+        body="PR description\n\nFixes #1",
+        head="fix/test-branch",
+        base="main",
     )
