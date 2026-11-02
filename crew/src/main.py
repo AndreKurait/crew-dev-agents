@@ -46,7 +46,7 @@ def list_all_files(repo, path="", depth=0):
 
 
 def gather_context():
-    """Read repo structure, key files, recent PRs, and issues."""
+    """Read repo structure, key files, open/merged PRs, and issues."""
     repo = get_repo()
     ctx = {}
 
@@ -85,6 +85,13 @@ def gather_context():
         if pr.merged:
             ctx["recent_prs"].append({"number": pr.number, "title": pr.title})
 
+    # Draft proposals remain open for review and must be visible on later runs.
+    ctx["open_prs"] = []
+    for pr in repo.get_pulls(state="open", sort="updated", direction="desc"):
+        ctx["open_prs"].append({"number": pr.number, "title": pr.title, "draft": pr.draft})
+        if len(ctx["open_prs"]) >= 20:
+            break
+
     return ctx
 
 
@@ -106,6 +113,9 @@ REPO FILE TREE:
 RECENT MERGED PRs (DO NOT duplicate these — pick something DIFFERENT):
 {json.dumps(recent_pr_titles, indent=2)}
 
+RECENT OPEN PRs, INCLUDING DRAFTS (DO NOT duplicate work already proposed):
+{json.dumps(context['open_prs'], indent=2)}
+
 OPEN ISSUES:
 {json.dumps(context['open_issues'], indent=2)}
 
@@ -113,7 +123,7 @@ KEY FILE CONTENTS:
 {json.dumps(context['file_contents'], indent=2)}
 
 RULES:
-- Pick ONE improvement that has NOT been done in recent PRs
+- Pick ONE improvement that has NOT been merged or proposed in the listed open PRs
 - Do NOT add more GitHub tool tests (already done many times)
 - Do NOT add ruff config (already done)
 - Focus on something NEW. Good options:

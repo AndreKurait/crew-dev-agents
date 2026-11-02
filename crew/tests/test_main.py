@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -89,3 +90,34 @@ def test_configured_crew_exposes_no_merge_or_close_tools(monkeypatch):
     crew.build_crew("https://github.com/example/test-repo")
     for call in agent.call_args_list:
         assert all(tool.name not in {"merge_pull_request", "close_issue"} for tool in call.kwargs["tools"])
+
+
+def test_open_draft_and_merged_history_reach_planner_input(repo, plan, monkeypatch):
+    import crewai
+
+    repo.get_issues.return_value = []
+    draft = SimpleNamespace(number=7, title="Pending draft improvement", draft=True)
+    open_pr = SimpleNamespace(number=8, title="Pending reviewed improvement", draft=False)
+    merged = SimpleNamespace(number=9, title="Previously merged improvement", merged=True)
+    unmerged = SimpleNamespace(number=10, title="Closed without merging", merged=False)
+    repo.get_pulls.side_effect = lambda *, state, **kwargs: (
+        [draft, open_pr] if state == "open" else [merged, unmerged]
+    )
+    llm = Mock()
+    llm.call.return_value = json.dumps(plan)
+    monkeypatch.setattr(crewai, "LLM", Mock(return_value=llm))
+
+    context = main.gather_context()
+    assert context["recent_prs"] == [{"number": 9, "title": merged.title}]
+    assert context["open_prs"] == [
+        {"number": 7, "title": draft.title, "draft": True},
+        {"number": 8, "title": open_pr.title, "draft": False},
+    ]
+    assert main.ask_llm_for_plan(context) == plan
+    prompt = llm.call.call_args.args[0][0]["content"]
+    assert draft.title in prompt
+    assert open_pr.title in prompt
+    assert '"draft": true' in prompt
+    assert merged.title in prompt
+    assert unmerged.title not in prompt
+    repo.create_pull.assert_not_called()
