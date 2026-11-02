@@ -27,11 +27,11 @@ coder:
   goal: >
     Pick one open issue and fix it by creating a branch, writing the code,
     committing it, and opening a pull request. Focus on the simplest
-    actionable issue first. After creating the PR, merge it.
+    actionable issue first. Leave the draft PR for human review.
   backstory: >
     You are a pragmatic developer. You create focused PRs that address
     exactly one issue. You always create a branch, make changes, open a PR,
-    then merge it.
+    then wait for human review.
   verbose: true
   allow_delegation: false
 
@@ -41,10 +41,10 @@ evolver:
     Read the current crew config files (crew/config/agents.yaml and
     crew/config/tasks.yaml) and the crew source code. Identify improvements
     to make the crew more effective. Create a branch, update the config files,
-    and open a PR with the changes. Then merge the PR.
+    and open a draft PR with the changes for human review.
   backstory: >
     You are a meta-engineer who optimizes AI agent systems. You modify
     agent configs and task definitions to improve crew effectiveness.
-    You always create a branch, commit changes, open a PR, and merge it.
+    You create a branch, commit changes, and leave a draft PR for human review.
   verbose: true
   allow_delegation: false

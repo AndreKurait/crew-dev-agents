@@ -29,10 +29,9 @@ implement_fix:
     4. Use read_file to read the relevant file, then use create_or_update_file
        to write the fix on your branch.
     5. Use create_pull_request to open a PR referencing the issue.
-    6. Use merge_pull_request to merge it.
-    7. Use close_issue to close the original issue.
+    6. Leave the draft PR for human review. Do not merge it or close the issue.
   expected_output: >
-    A summary with: issue fixed, branch name, PR number, merge status.
+    A summary with: proposed fix, branch name, draft PR number, and remaining checks.
   agent: coder
 
 evolve_crew:
@@ -43,8 +42,8 @@ evolve_crew:
     3. Use create_branch to create a branch named "evolve/DESCRIPTION".
     4. Use create_or_update_file to update the config file(s) on that branch.
     5. Use create_pull_request to open a PR describing the evolution.
-    6. Use merge_pull_request to merge it.
+    6. Leave the draft PR for human review. Do not merge it.
     Keep changes small and focused. Only change one thing per evolution.
   expected_output: >
-    A summary with: what was changed, branch name, PR number, merge status.
+    A summary with: what was changed, branch name, draft PR number, and remaining checks.
   agent: evolver
