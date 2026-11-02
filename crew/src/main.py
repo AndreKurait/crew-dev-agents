@@ -3,9 +3,11 @@ Agent-as-planner pattern: LLM decides what to do, Python executes it.
 """
 import json
 import os
+import re
 import sys
 import traceback
 import uuid
+from pathlib import PurePosixPath
 
 from github import Github, Auth, GithubException
 
@@ -44,7 +46,7 @@ def list_all_files(repo, path="", depth=0):
 
 
 def gather_context():
-    """Read repo structure, key files, recent PRs, and issues."""
+    """Read repo structure, key files, open/merged PRs, and issues."""
     repo = get_repo()
     ctx = {}
 
@@ -78,8 +80,17 @@ def gather_context():
     # Recent merged PRs (to avoid duplicating work)
     ctx["recent_prs"] = []
     for pr in repo.get_pulls(state="closed", sort="updated", direction="desc"):
-        if pr.merged and len(ctx["recent_prs"]) < 15:
+        if len(ctx["recent_prs"]) >= 15:
+            break
+        if pr.merged:
             ctx["recent_prs"].append({"number": pr.number, "title": pr.title})
+
+    # Draft proposals remain open for review and must be visible on later runs.
+    ctx["open_prs"] = []
+    for pr in repo.get_pulls(state="open", sort="updated", direction="desc"):
+        ctx["open_prs"].append({"number": pr.number, "title": pr.title, "draft": pr.draft})
+        if len(ctx["open_prs"]) >= 20:
+            break
 
     return ctx
 
@@ -102,6 +113,9 @@ REPO FILE TREE:
 RECENT MERGED PRs (DO NOT duplicate these — pick something DIFFERENT):
 {json.dumps(recent_pr_titles, indent=2)}
 
+RECENT OPEN PRs, INCLUDING DRAFTS (DO NOT duplicate work already proposed):
+{json.dumps(context['open_prs'], indent=2)}
+
 OPEN ISSUES:
 {json.dumps(context['open_issues'], indent=2)}
 
@@ -109,7 +123,7 @@ KEY FILE CONTENTS:
 {json.dumps(context['file_contents'], indent=2)}
 
 RULES:
-- Pick ONE improvement that has NOT been done in recent PRs
+- Pick ONE improvement that has NOT been merged or proposed in the listed open PRs
 - Do NOT add more GitHub tool tests (already done many times)
 - Do NOT add ruff config (already done)
 - Focus on something NEW. Good options:
@@ -134,8 +148,7 @@ Respond with ONLY valid JSON (no markdown, no code fences):
     }}
   ],
   "pr_title": "Clear PR title",
-  "pr_body": "Description of what this PR does and why",
-  "close_issues": []
+  "pr_body": "Description of what this PR does and why"
 }}"""
 
     response = llm.call([{"role": "user", "content": prompt}])
@@ -147,13 +160,54 @@ Respond with ONLY valid JSON (no markdown, no code fences):
     raise ValueError(f"No JSON found in LLM response: {text[:500]}")
 
 
+def validate_plan(plan: dict):
+    """Reject malformed model output before making any repository changes."""
+    if not isinstance(plan, dict):
+        raise ValueError("plan must be an object")
+    for field in ("branch_name", "pr_title", "pr_body"):
+        if not isinstance(plan.get(field), str) or not plan[field].strip():
+            raise ValueError(f"{field} must be a non-empty string")
+    branch = plan["branch_name"]
+    if (
+        not re.fullmatch(r"auto/[A-Za-z0-9][A-Za-z0-9._/-]*", branch)
+        or ".." in branch
+        or any(part.startswith(".") or part.endswith(".lock") or not part for part in branch.split("/"))
+        or branch.endswith(".")
+    ):
+        raise ValueError("branch_name must be a valid branch below auto/")
+    files = plan.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError("files must be a non-empty list")
+    seen = set()
+    for spec in files:
+        if not isinstance(spec, dict):
+            raise ValueError("each file must be an object")
+        path = spec.get("path")
+        if (
+            not isinstance(path, str) or not path
+            or PurePosixPath(path).is_absolute()
+            or any(part in ("", ".", "..", ".git") for part in path.split("/"))
+            or "\\" in path or "\x00" in path or path in seen
+        ):
+            raise ValueError(f"invalid or duplicate repository file path: {path!r}")
+        if not isinstance(spec.get("content"), str):
+            raise ValueError(f"file content must be a string: {path}")
+        if not isinstance(spec.get("message", f"Update {path}"), str):
+            raise ValueError(f"commit message must be a string: {path}")
+        seen.add(path)
+
+
 def execute_plan(plan: dict):
-    """Execute: create branch, write files, create PR, merge."""
+    """Create a branch and draft PR for human review; never merge or close issues."""
+    validate_plan(plan)
     repo = get_repo()
     branch = plan["branch_name"]
+    base = repo.default_branch
+    if branch == base:
+        raise ValueError("the proposed branch must differ from the default branch")
 
     print(f"Creating branch: {branch}")
-    main_ref = repo.get_git_ref("heads/main")
+    main_ref = repo.get_git_ref(f"heads/{base}")
     try:
         repo.create_git_ref(f"refs/heads/{branch}", main_ref.object.sha)
     except GithubException as e:
@@ -171,25 +225,16 @@ def execute_plan(plan: dict):
         try:
             existing = repo.get_contents(path, ref=branch)
             repo.update_file(path, message, content, existing.sha, branch=branch)
-        except GithubException:
+        except GithubException as error:
+            if error.status != 404:
+                raise
             repo.create_file(path, message, content, branch=branch)
 
-    print(f"Creating PR: {plan['pr_title']}")
-    pr = repo.create_pull(title=plan["pr_title"], body=plan["pr_body"], head=branch, base="main")
+    print(f"Creating draft PR: {plan['pr_title']}")
+    pr = repo.create_pull(
+        title=plan["pr_title"], body=plan["pr_body"], head=branch, base=base, draft=True
+    )
     print(f"  PR #{pr.number}: {pr.html_url}")
-
-    print(f"Merging PR #{pr.number}")
-    pr.merge(merge_method="squash")
-
-    for issue_num in plan.get("close_issues", []):
-        try:
-            issue = repo.get_issue(int(issue_num))
-            issue.create_comment(f"Fixed by #{pr.number}")
-            issue.edit(state="closed")
-            print(f"  Closed issue #{issue_num}")
-        except Exception:
-            pass
-
     return pr.number
 
 
@@ -197,7 +242,7 @@ def main():
     repo_url = os.environ.get("REPO_URL")
     if not repo_url:
         print("ERROR: REPO_URL required", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
     print(f"=== Crew Dev Agents: Self-Improvement Run ===")
     print(f"Repo: {repo_url}")
@@ -214,12 +259,14 @@ def main():
 
         print("Executing plan...")
         pr_num = execute_plan(plan)
-        print(f"=== SUCCESS: PR #{pr_num} merged ===")
+        print(f"=== SUCCESS: draft PR #{pr_num} is ready for human review ===")
+        return 0
 
     except Exception as e:
         print(f"=== FAILED: {e} ===")
         traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

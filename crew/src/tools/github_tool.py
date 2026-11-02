@@ -112,11 +112,11 @@ def read_file(path: str = "README.md") -> str:
 
 @tool("create_branch")
 def create_branch(branch_name: str = "auto/improvement") -> str:
-    """Create a new branch from main. Provide a descriptive branch_name."""
+    """Create a new branch from the repository default branch."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
-        main_ref = repo.get_git_ref("heads/main")
+        main_ref = repo.get_git_ref(f"heads/{repo.default_branch}")
         repo.create_git_ref(f"refs/heads/{branch_name}", main_ref.object.sha)
         return json.dumps({"branch": branch_name, "sha": main_ref.object.sha})
     except Exception as e:
@@ -124,18 +124,22 @@ def create_branch(branch_name: str = "auto/improvement") -> str:
 
 
 @tool("create_or_update_file")
-def create_or_update_file(path: str = "", content: str = "", message: str = "auto update", branch: str = "main") -> str:
-    """Create or update a file on a branch. path and content are required."""
+def create_or_update_file(path: str = "", content: str = "", message: str = "auto update", branch: str = "") -> str:
+    """Create or update a file on an explicit non-default branch."""
     try:
-        if not path or not content:
-            return "Error: path and content are required"
+        if not path or not branch:
+            return "Error: path and an explicit branch are required"
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
+        if branch in (repo.default_branch, f"refs/heads/{repo.default_branch}"):
+            return "Error: direct writes to the default branch are disabled"
         try:
             existing = repo.get_contents(path, ref=branch)
             result = repo.update_file(path, message, content, existing.sha, branch=branch)
             return json.dumps({"action": "updated", "sha": result["commit"].sha})
-        except GithubException:
+        except GithubException as error:
+            if error.status != 404:
+                raise
             result = repo.create_file(path, message, content, branch=branch)
             return json.dumps({"action": "created", "sha": result["commit"].sha})
     except Exception as e:
@@ -143,12 +147,15 @@ def create_or_update_file(path: str = "", content: str = "", message: str = "aut
 
 
 @tool("create_pull_request")
-def create_pull_request(title: str = "Auto improvement", body: str = "Automated PR", head_branch: str = "auto/improvement", base_branch: str = "main") -> str:
-    """Create a pull request from head_branch to base_branch."""
+def create_pull_request(title: str = "Auto improvement", body: str = "Automated PR", head_branch: str = "auto/improvement", base_branch: str = "") -> str:
+    """Create a draft pull request for human review, targeting the default branch unless specified."""
     try:
         gh = _get_github()
         repo = gh.get_repo(_repo_name())
-        pr = repo.create_pull(title=title, body=body, head=head_branch, base=base_branch)
+        pr = repo.create_pull(
+            title=title, body=body, head=head_branch,
+            base=base_branch or repo.default_branch, draft=True,
+        )
         return json.dumps({"number": pr.number, "url": pr.html_url})
     except Exception as e:
         return f"Error: {e}"

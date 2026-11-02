@@ -5,16 +5,17 @@ import yaml
 from crewai import Agent, Crew, Task, LLM
 
 from src.tools.github_tool import (
-    list_open_issues, list_open_prs, add_issue_comment, add_labels,
+    list_open_issues, list_open_prs, add_labels,
     create_issue, get_repo_contents, read_file,
     create_or_update_file, create_branch, create_pull_request,
-    merge_pull_request, close_issue,
 )
 from src.tools.metrics_tool import store_metrics, read_recent_metrics
 
 
 def load_yaml(name: str) -> dict:
-    config_dir = Path(__file__).parent.parent / "config"
+    config_dir = Path(__file__).parent / "config"
+    if not config_dir.is_dir():
+        config_dir = Path(__file__).parent.parent / "config"
     with open(config_dir / name) as f:
         return yaml.safe_load(f)
 
@@ -32,10 +33,10 @@ def build_crew(repo_url: str | None = None) -> Crew:
     tasks_cfg = load_yaml("tasks.yaml")
 
     tool_map = {
-        "triager": [list_open_issues, add_labels, create_issue],
+        "triager": [list_open_issues, get_repo_contents, read_file, add_labels, create_issue],
         "reviewer": [get_repo_contents, read_file, create_issue],
-        "coder": [list_open_issues, read_file, create_branch, create_or_update_file, create_pull_request, merge_pull_request, close_issue],
-        "evolver": [read_file, create_branch, create_or_update_file, create_pull_request, merge_pull_request],
+        "coder": [list_open_issues, read_file, create_branch, create_or_update_file, create_pull_request],
+        "evolver": [read_file, create_branch, create_or_update_file, create_pull_request],
     }
 
     agents = {}
