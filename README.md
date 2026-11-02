@@ -1,3 +1,5 @@
+> **Archived proof of concept — November 2026. Development and GitHub image publication are frozen. Source, deployment examples, and history remain available; this archival does not remove previously published images or externally running resources.**
+
 # crew-dev-agents
 
 Proof of concept for proposing GitHub repository changes with CrewAI and Amazon Bedrock.
